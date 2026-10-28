@@ -1,0 +1,28 @@
+services:
+  - type: worker
+    name: mythics-gathering-giveaway-bot
+    env: node
+    buildCommand: npm install
+    startCommand: node src/index.js
+    # A background worker stays awake around the clock so timed draws and
+    # milestone joins are never missed. Workers are not on Render's free tier.
+    plan: starter
+    # Persistent disk: giveaways and their state live in a JSON file, so the
+    # data file must survive restarts and redeploys. The disk is mounted at
+    # /data and GIVEAWAY_DB_PATH points there.
+    disk:
+      name: giveaway-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: GIVEAWAY_DB_PATH
+        value: /data/giveaways.json
+      # Set these three in the Render dashboard (never in this file):
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: GUILD_ID
+        sync: false

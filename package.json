@@ -1,0 +1,1 @@
+{"dependencies":{"discord.js":"^14.17.3"},"description":"Discord giveaway bot for the Mythic's Gathering server. Slash commands, server-wide entry, public winner announcements, no DMs.","engines":{"node":">=18"},"main":"src/index.js","name":"mythics-gathering-giveaway-bot","scripts":{"start":"node src/index.js"},"type":"commonjs","version":"1.0.0"}
