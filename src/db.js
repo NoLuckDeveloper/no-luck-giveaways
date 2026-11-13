@@ -18,7 +18,7 @@ const dbPath = process.env.GIVEAWAY_DB_PATH || path.join(__dirname, '..', 'data'
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 function emptyStore() {
-  return { nextGiveawayId: 1, giveaways: [], winners: [] };
+  return { nextGiveawayId: 1, giveaways: [], winners: [], nextRaffleId: 1, raffles: [] };
 }
 
 function load() {
@@ -28,6 +28,11 @@ function load() {
     if (!store || !Array.isArray(store.giveaways) || !Array.isArray(store.winners)) return emptyStore();
     if (typeof store.nextGiveawayId !== 'number') {
       store.nextGiveawayId = store.giveaways.reduce((max, g) => Math.max(max, g.id), 0) + 1;
+    }
+    // Raffles were added later — old stores won't have them yet.
+    if (!Array.isArray(store.raffles)) store.raffles = [];
+    if (typeof store.nextRaffleId !== 'number') {
+      store.nextRaffleId = store.raffles.reduce((max, r) => Math.max(max, r.id), 0) + 1;
     }
     return store;
   } catch {
@@ -115,6 +120,114 @@ function listPreviousWinners(giveawayId) {
   return store.winners.filter((w) => w.giveaway_id === giveawayId).map((w) => w.user_id);
 }
 
+// ---------------------------------------------------------------------------
+// Claim-your-number raffles.
+// A raffle is numbers 1..max_number for one prize. Entry is free — a member
+// claims one number, first come first served. Claims are stored as an object
+// mapping number (as a string key) to the claiming user's ID, so one user
+// holds at most one number: claiming again moves their claim to the new
+// number and frees the old one. The draw picks a random CLAIMED number, so
+// there is always a winner when at least one number is claimed.
+// ---------------------------------------------------------------------------
+
+function createRaffle({ guildId, channelId, prize, maxNumber, endsAt, createdBy }) {
+  const raffle = {
+    id: store.nextRaffleId++,
+    guild_id: guildId,
+    channel_id: channelId,
+    message_id: null,
+    prize,
+    max_number: maxNumber,
+    ends_at: endsAt ?? null,
+    status: 'active',
+    claims: {},
+    winner_number: null,
+    winner_id: null,
+    created_by: createdBy,
+    created_at: Date.now(),
+    ended_at: null,
+  };
+  store.raffles.push(raffle);
+  save();
+  return { ...raffle, claims: { ...raffle.claims } };
+}
+
+function getRaffleById(raffleId, guildId) {
+  const r = store.raffles.find((row) => row.id === raffleId && row.guild_id === guildId);
+  return r ? { ...r, claims: { ...r.claims } } : undefined;
+}
+
+function listActiveRaffles(guildId) {
+  return store.raffles
+    .filter((r) => r.guild_id === guildId && r.status === 'active')
+    .sort((a, b) => a.created_at - b.created_at)
+    .map((r) => ({ ...r, claims: { ...r.claims } }));
+}
+
+function listPendingRaffles() {
+  return store.raffles
+    .filter((r) => r.status === 'active')
+    .sort((a, b) => a.created_at - b.created_at)
+    .map((r) => ({ ...r, claims: { ...r.claims } }));
+}
+
+function setRaffleMessageId(raffleId, messageId) {
+  const r = store.raffles.find((row) => row.id === raffleId);
+  if (r) {
+    r.message_id = messageId;
+    save();
+  }
+}
+
+// Claims a number for a user. Returns { ok: true, movedFrom } on success, or
+// { ok: false, error } with a plain-language reason. Re-claiming moves the
+// user's claim: the old number is freed and the new one is taken.
+function claimRaffleNumber(raffleId, userId, number) {
+  const r = store.raffles.find((row) => row.id === raffleId);
+  if (!r) return { ok: false, error: 'raffle not found' };
+  if (r.status !== 'active') return { ok: false, error: 'that raffle is closed' };
+  if (!Number.isInteger(number) || number < 1 || number > r.max_number) {
+    return { ok: false, error: `pick a number from 1 to ${r.max_number}` };
+  }
+  const key = String(number);
+  const holder = r.claims[key];
+  if (holder && holder !== userId) {
+    return { ok: false, error: `number ${number} is already taken` };
+  }
+  if (holder === userId) return { ok: true, movedFrom: null, alreadyHad: true };
+  let movedFrom = null;
+  for (const [num, owner] of Object.entries(r.claims)) {
+    if (owner === userId) {
+      movedFrom = Number(num);
+      delete r.claims[num];
+      break;
+    }
+  }
+  r.claims[key] = userId;
+  save();
+  return { ok: true, movedFrom, alreadyHad: false };
+}
+
+function markRaffleEnded(raffleId, winnerNumber, winnerId) {
+  const r = store.raffles.find((row) => row.id === raffleId);
+  if (r) {
+    r.status = 'ended';
+    r.winner_number = winnerNumber;
+    r.winner_id = winnerId;
+    r.ended_at = Date.now();
+    save();
+  }
+}
+
+function cancelRaffle(raffleId) {
+  const r = store.raffles.find((row) => row.id === raffleId);
+  if (r) {
+    r.status = 'cancelled';
+    r.ended_at = Date.now();
+    save();
+  }
+}
+
 module.exports = {
   createGiveaway,
   setMessageId,
@@ -124,4 +237,12 @@ module.exports = {
   markEnded,
   recordWinners,
   listPreviousWinners,
+  createRaffle,
+  getRaffleById,
+  listActiveRaffles,
+  listPendingRaffles,
+  setRaffleMessageId,
+  claimRaffleNumber,
+  markRaffleEnded,
+  cancelRaffle,
 };
