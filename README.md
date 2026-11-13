@@ -47,12 +47,14 @@ Discord or under Texas law — so this bot will never take payment for a number.
   still open.
 - **The draw picks a random claimed number** — never an unclaimed one, so a
   raffle with at least one claim always has a winner. A mod draws with
-  `/raffle draw`, or the raffle auto-draws if a duration was set when it
-  started. A manual draw with zero claims is refused; an auto-draw with zero
-  claims closes the raffle and announces there was no winner.
+  `/raffle draw` — raffles never draw on their own. A draw with zero claims
+  is refused.
+- **When the last number is claimed** the bot announces in the raffle
+  channel that the list is full and a mod can draw the winner with
+  `/raffle draw`. The announcement only — the draw stays manual and mod-only.
 - **Raffles survive restarts** just like giveaways — they live in the same
-  JSON file, and a timed raffle still open at startup gets its draw
-  re-scheduled (or drawn immediately if its time already passed).
+  JSON file, and an open raffle just stays open until a mod draws it or
+  cancels it.
 - **Raffle IDs are short numbers** (#1, #2, …) shown in every raffle post and
   reply. When only one raffle is open you can leave the ID off a command;
   when several are open, the command asks you to say which one.
@@ -81,7 +83,7 @@ the board are open to every member. Entry is always free.
 
 | Command | What it does |
 |---|---|
-| `/raffle start prize:<prize> max-number:<N> [duration-minutes:<minutes>]` | Starts a number raffle, numbers 1 to N. With a duration it auto-draws when the time runs out (1 minute to 30 days); without one, a mod draws it with `/raffle draw`. |
+| `/raffle start prize:<prize> max-number:<N>` | Starts a number raffle, numbers 1 to N. No timer, no auto-draw — a mod draws it with `/raffle draw` when ready. |
 | `/raffle claim number:<N> [id:<raffle #>]` | Claims a free number in the open raffle. One per person — claiming again moves your claim to the new number and frees the old one. A taken number is rejected. |
 | `/raffle board [id:<raffle #>]` | Shows who holds each claimed number and which numbers are still open. |
 | `/raffle draw [id:<raffle #>]` | Draws the winning number from the claimed numbers and announces the winner. Refused when nobody has claimed a number. |
@@ -158,14 +160,15 @@ straight from Discord into Render.
 4. Try `/giveaway list`, then end one early with `/giveaway end` and redraw
    with `/giveaway reroll`, using the message ID from the post's footer.
 
-### 7. Test a raffle (takes about a minute)
+### 7. Test a raffle
 
-1. Run `/raffle start prize:Test raffle max-number:5 duration-minutes:1`.
+1. Run `/raffle start prize:Test raffle max-number:5`.
 2. Claim a number with `/raffle claim number:3` — the raffle post's board
    updates to show your claim. Try claiming a second number to see your
    claim move, and `/raffle board` to see the full board.
-3. After a minute the raffle auto-draws from the claimed numbers and
-   announces the winner by tag. Or draw it early with `/raffle draw`.
+3. Claim numbers until the list fills — when the last number is claimed the
+   bot announces in the channel that the list is full.
+4. Draw the winner with `/raffle draw` — the bot announces the winner by tag.
 
 ## Running it yourself (optional)
 
