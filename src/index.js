@@ -1,16 +1,22 @@
 // Mythic's Gathering giveaway bot. Also runs claim-your-number raffles
 // (/raffle) — free entry, one number per person, draw picks a random
 // claimed number. See README.md for both command sets.
+//
+// Multi-server: the bot works in every server it is added to. Commands are
+// registered globally, and giveaways, raffles, and winners are kept separate
+// per server (see db.js).
 // Env vars (never put secrets in code):
 //   DISCORD_TOKEN — bot token from discord.com/developers
 //   CLIENT_ID     — application ID from discord.com/developers
-//   GUILD_ID      — the Mythic's Gathering server ID (guild commands, fast updates)
 //   GIVEAWAY_DB_PATH (optional) — JSON data file location, default ./data/giveaways.json
+//
+// There is no GUILD_ID: commands are registered globally, so the bot works
+// in any server it is invited to.
 //
 // Intents: Guilds + GuildMembers. GuildMembers ("Server Members Intent" in the
 // Developer Portal) is what lets the bot see member joins for milestone
 // giveaways and read the member list for the draw. It is not a privileged
-// approval-gated intent for a bot in a single small server — just flip the
+// approval-gated intent for a bot in under 100 servers — just flip the
 // toggle on. No message-content intent is needed: the bot never reads messages.
 
 const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
@@ -30,7 +36,10 @@ function requireEnv(name) {
 
 const token = requireEnv('DISCORD_TOKEN');
 const clientId = requireEnv('CLIENT_ID');
-const guildId = requireEnv('GUILD_ID');
+// GUILD_ID is intentionally not read: it is no longer needed. If it is set
+// in the environment (e.g. left over from the single-server setup), it is
+// ignored — except by the one-time data migration in db.js, which uses it
+// only to attribute legacy rows that were saved without a guild_id.
 
 // Active timed-giveaway timers, keyed by giveaway row id.
 const timers = new Map();
@@ -50,30 +59,53 @@ function scheduleTimedDraw(client, giveaway) {
 
 async function registerCommands() {
   const rest = new REST({ version: '10' }).setToken(token);
-  await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+  // Global commands: they appear in every server the bot is added to.
+  // Discord can take up to about an hour to show them in a newly added
+  // server, so don't re-register guild copies — that would duplicate them.
+  await rest.put(Routes.applicationCommands(clientId), {
     body: [commandData.toJSON(), raffleCommandData.toJSON()],
   });
-  console.log(`Registered /giveaway and /raffle commands for guild ${guildId}.`);
+  console.log('Registered /giveaway and /raffle commands globally.');
 }
 
 async function resumePending(client) {
-  const pending = db.listPendingGiveaways().filter((g) => g.guild_id === guildId);
+  // Timed giveaways still running in ANY server get their draw re-scheduled.
+  // Rows without a guild_id (legacy, unmigrated) cannot be drawn — they were
+  // logged by the migration in db.js and are skipped here.
+  const pending = db.listPendingGiveaways();
+  let resumed = 0;
   for (const giveaway of pending) {
     if (giveaway.kind === 'milestone') {
       // Milestones are checked on joins and on startup, below.
       continue;
     }
+    if (!giveaway.guild_id) {
+      console.warn(`Skipping pending giveaway ${giveaway.id} (${giveaway.prize}): no guild_id.`);
+      continue;
+    }
     scheduleTimedDraw(client, giveaway);
+    resumed += 1;
   }
-  // If the server already hit a milestone target while the bot was down,
+  // If any server already hit a milestone target while the bot was down,
   // draw those immediately instead of waiting for the next join.
+  let guildCount = 0;
+  let milestoneDraws = 0;
   try {
-    const guild = await client.guilds.fetch(guildId);
-    await checkMilestones(client, guild);
+    const guilds = await client.guilds.fetch();
+    guildCount = guilds.size;
+    for (const [guildId] of guilds) {
+      try {
+        const guild = await client.guilds.fetch(guildId);
+        const drawn = await checkMilestones(client, guild);
+        milestoneDraws += drawn.length;
+      } catch (err) {
+        console.error(`Milestone check on startup failed for guild ${guildId}:`, err);
+      }
+    }
   } catch (err) {
-    console.error('Milestone check on startup failed:', err);
+    console.error('Could not list guilds for the startup milestone check:', err);
   }
-  console.log(`Resumed ${pending.length} pending giveaway(s).`);
+  console.log(`Resumed ${resumed} pending timed giveaway(s) across ${guildCount} server(s); ${milestoneDraws} milestone(s) drawn on startup.`);
   // Raffles need no resume: they have no timers — an open raffle just stays
   // open until a mod draws or cancels it.
 }
@@ -93,16 +125,16 @@ async function main() {
 
   client.on('interactionCreate', async (interaction) => {
     try {
-      if (interaction.isChatInputCommand() && interaction.guildId === guildId) {
+      if (interaction.isChatInputCommand() && (interaction.commandName === 'giveaway' || interaction.commandName === 'raffle')) {
+        if (!interaction.guildId) {
+          await interaction.reply({ content: 'Giveaways and raffles only work in a server, not in DMs.', ephemeral: true });
+          return;
+        }
         if (interaction.commandName === 'giveaway') {
           await handleGiveawayCommand(interaction, timers);
-        } else if (interaction.commandName === 'raffle') {
+        } else {
           await handleRaffleCommand(interaction);
         }
-        return;
-      }
-      if (interaction.isChatInputCommand()) {
-        await interaction.reply({ content: 'This bot only runs in its home server.', ephemeral: true });
       }
     } catch (err) {
       console.error('Interaction failed:', err);
@@ -112,10 +144,10 @@ async function main() {
     }
   });
 
-  // Milestone trigger: a member joined. guild.memberCount is the number
-  // Discord reports for the server — the same number Jake sees.
+  // Milestone trigger: a member joined, in any server the bot is in.
+  // guild.memberCount is the number Discord reports for the server — the
+  // same number Jake sees.
   client.on('guildMemberAdd', async (member) => {
-    if (member.guild.id !== guildId) return;
     try {
       await checkMilestones(client, member.guild);
     } catch (err) {

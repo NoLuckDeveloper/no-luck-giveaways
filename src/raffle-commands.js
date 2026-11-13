@@ -18,6 +18,7 @@ const MAX_NUMBER_CAP = 1000;
 const raffleCommandData = new SlashCommandBuilder()
   .setName('raffle')
   .setDescription('Claim-your-number raffles — free entry, one number per person')
+  .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
       .setName('start')

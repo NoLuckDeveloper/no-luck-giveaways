@@ -4,9 +4,16 @@
 //
 // A JSON file is used instead of SQLite because the native SQLite module
 // cannot build in this sandbox (its build step is blocked), and the bot's
-// data is tiny — a handful of giveaways for one server — so a file rewritten
+// data is tiny — a handful of giveaways per server — so a file rewritten
 // atomically on each change is more than enough. Writes are synchronous and
 // atomic (temp file + rename) so a crash mid-write never corrupts the store.
+//
+// Multi-server: every giveaway and raffle row carries a guild_id, and every
+// list/get call filters by it, so one server never sees another's giveaways
+// or raffles. Giveaway and raffle IDs come from global counters
+// (nextGiveawayId / nextRaffleId), so they are unique across servers and
+// id-only lookups (markEnded, claimRaffleNumber, …) cannot cross over —
+// callers always resolve the row through a guild-filtered get first.
 //
 // There is no entries table: every server member is automatically in the pool,
 // so the pool is read live from Discord at draw time (non-bot members only).
@@ -19,6 +26,42 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 function emptyStore() {
   return { nextGiveawayId: 1, giveaways: [], winners: [], nextRaffleId: 1, raffles: [] };
+}
+
+// Multi-server migration: rows saved before multi-server support may lack
+// a guild_id. Every row the bot has written since launch carries guild_id,
+// so in practice this backfills nothing — but if a legacy row is missing
+// one, attribute it to the old home guild when GUILD_ID is still set in
+// the environment (it is, on the existing Render service, from the
+// single-server setup). Rows that still cannot be attributed are preserved
+// in the file untouched and logged, rather than guessed at: they stay
+// invisible to every server instead of leaking into the wrong one.
+// Runs on every load, but is idempotent — once a row has a guild_id it is
+// never touched again.
+function migrate(store) {
+  const homeGuildId = process.env.GUILD_ID || null;
+  let backfilled = 0;
+  let orphaned = 0;
+  for (const row of [...store.giveaways, ...store.raffles]) {
+    if (row.guild_id) continue;
+    if (homeGuildId) {
+      row.guild_id = homeGuildId;
+      backfilled += 1;
+    } else {
+      orphaned += 1;
+    }
+  }
+  if (backfilled > 0) {
+    console.log(`Multi-server migration: attributed ${backfilled} legacy row(s) to home guild ${homeGuildId}.`);
+  }
+  if (orphaned > 0) {
+    console.warn(
+      `Multi-server migration: ${orphaned} row(s) have no guild_id and GUILD_ID is not set — ` +
+      'they are preserved in the data file but invisible to every server. ' +
+      'Set GUILD_ID to the old home server ID once and restart to attribute them.',
+    );
+  }
+  return backfilled > 0;
 }
 
 function load() {
@@ -34,6 +77,7 @@ function load() {
     if (typeof store.nextRaffleId !== 'number') {
       store.nextRaffleId = store.raffles.reduce((max, r) => Math.max(max, r.id), 0) + 1;
     }
+    if (migrate(store)) saveStore(store);
     return store;
   } catch {
     return emptyStore();
@@ -42,10 +86,14 @@ function load() {
 
 let store = load();
 
-function save() {
+function saveStore(data) {
   const tmpPath = `${dbPath}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2));
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   fs.renameSync(tmpPath, dbPath);
+}
+
+function save() {
+  saveStore(store);
 }
 
 function createGiveaway({ guildId, channelId, kind, prize, endsAt, target, createdBy }) {

@@ -15,6 +15,7 @@ const { buildEmbed, drawGiveaway } = require('./giveaway');
 const commandData = new SlashCommandBuilder()
   .setName('giveaway')
   .setDescription('Run server giveaways — every member is entered automatically')
+  .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
       .setName('start')
