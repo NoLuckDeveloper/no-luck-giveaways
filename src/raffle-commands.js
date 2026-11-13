@@ -41,7 +41,7 @@ const raffleCommandData = new SlashCommandBuilder()
         opt.setName('number').setDescription('The number you want to claim').setRequired(true).setMinValue(1),
       )
       .addIntegerOption((opt) =>
-        opt.setName('id').setDescription('Raffle number (only needed if more than one raffle is open)').setMinValue(1),
+        opt.setName('id').setDescription('Raffle number in this server (only needed if more than one raffle is open)').setMinValue(1),
       ),
   )
   .addSubcommand((sub) =>
@@ -49,7 +49,7 @@ const raffleCommandData = new SlashCommandBuilder()
       .setName('board')
       .setDescription('Show who holds each claimed number and which numbers are still open')
       .addIntegerOption((opt) =>
-        opt.setName('id').setDescription('Raffle number (only needed if more than one raffle is open)').setMinValue(1),
+        opt.setName('id').setDescription('Raffle number in this server (only needed if more than one raffle is open)').setMinValue(1),
       ),
   )
   .addSubcommand((sub) =>
@@ -57,7 +57,7 @@ const raffleCommandData = new SlashCommandBuilder()
       .setName('draw')
       .setDescription('Draw the winning number from the claimed numbers')
       .addIntegerOption((opt) =>
-        opt.setName('id').setDescription('Raffle number (only needed if more than one raffle is open)').setMinValue(1),
+        opt.setName('id').setDescription('Raffle number in this server (only needed if more than one raffle is open)').setMinValue(1),
       ),
   )
   .addSubcommand((sub) =>
@@ -65,7 +65,7 @@ const raffleCommandData = new SlashCommandBuilder()
       .setName('cancel')
       .setDescription('Cancel an open raffle with no winner')
       .addIntegerOption((opt) =>
-        opt.setName('id').setDescription('Raffle number (only needed if more than one raffle is open)').setMinValue(1),
+        opt.setName('id').setDescription('Raffle number in this server (only needed if more than one raffle is open)').setMinValue(1),
       ),
   );
 
@@ -74,19 +74,29 @@ function needsManageMessages(interaction) {
   return perms && perms.has(PermissionFlagsBits.ManageMessages);
 }
 
+// The number users see and pass to commands: the per-server raffle number.
+// Falls back to the internal id for any row that somehow lacks one.
+function raffleNo(raffle) {
+  return raffle.number ?? raffle.id;
+}
+
 // Picks the raffle an id-less command refers to: the given id, or the only
-// open raffle when exactly one exists. Returns { raffle } or { error }.
+// open raffle when exactly one exists. The id is the per-server raffle
+// number — it only ever means something inside the current server — and
+// only that server's open raffles are ever considered, so open raffles in
+// other servers can never block a claim, board, or draw here.
+// Returns { raffle } or { error }.
 function resolveRaffle(interaction) {
   const id = interaction.options.getInteger('id');
   const active = db.listActiveRaffles(interaction.guild.id);
   if (id !== null && id !== undefined) {
-    const raffle = active.find((r) => r.id === id);
+    const raffle = active.find((r) => (r.number ?? r.id) === id);
     if (!raffle) return { error: `No open raffle #${id} in this server.` };
     return { raffle };
   }
   if (active.length === 0) return { error: 'No open raffle in this server right now.' };
   if (active.length > 1) {
-    const ids = active.map((r) => `#${r.id} (${r.prize})`).join(', ');
+    const ids = active.map((r) => `#${raffleNo(r)} (${r.prize})`).join(', ');
     return { error: `More than one raffle is open — say which one: ${ids}. Add the id to the command.` };
   }
   return { raffle: active[0] };
@@ -136,7 +146,7 @@ async function handleStart(interaction) {
   await message.edit({ embeds: [buildRaffleEmbed(raffle, false)] }).catch(() => null);
 
   return interaction.reply({
-    content: `Raffle #${raffle.id} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, claim as many numbers as you like — a mod draws it with /raffle draw when ready. Members claim with /raffle claim.`,
+    content: `Raffle #${raffleNo(raffle)} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, claim as many numbers as you like — a mod draws it with /raffle draw when ready. Members claim with /raffle claim.`,
     ephemeral: true,
   });
 }
@@ -163,7 +173,7 @@ async function handleClaim(interaction) {
       if (channel && channel.isTextBased()) {
         await channel
           .send(
-            `🎟️ Raffle #${fresh.id} is full — all ${fresh.max_number} numbers are claimed! A mod can draw the winner with \`/raffle draw\`.`,
+            `🎟️ Raffle #${raffleNo(fresh)} is full — all ${fresh.max_number} numbers are claimed! A mod can draw the winner with \`/raffle draw\`.`,
           )
           .catch(() => null);
       }
@@ -173,13 +183,13 @@ async function handleClaim(interaction) {
   }
 
   if (result.alreadyHad) {
-    return interaction.reply({ content: `You already hold number **${number}** in raffle #${raffle.id}.`, ephemeral: true });
+    return interaction.reply({ content: `You already hold number **${number}** in raffle #${raffleNo(raffle)}.`, ephemeral: true });
   }
   const heldCount = fresh
     ? Object.values(fresh.claims).filter((owner) => owner === interaction.user.id).length
     : 1;
   const heldNote = heldCount > 1 ? ` You now hold **${heldCount}** numbers in this raffle.` : '';
-  return interaction.reply({ content: `You're in raffle #${raffle.id} — number **${number}** is yours. Good luck!${heldNote}`, ephemeral: true });
+  return interaction.reply({ content: `You're in raffle #${raffleNo(raffle)} — number **${number}** is yours. Good luck!${heldNote}`, ephemeral: true });
 }
 
 async function handleBoard(interaction) {
@@ -187,7 +197,7 @@ async function handleBoard(interaction) {
   if (error) return interaction.reply({ content: error, ephemeral: true });
   const claimed = claimedNumbers(raffle);
   const openCount = raffle.max_number - claimed.length;
-  const lines = [`**Raffle #${raffle.id} — ${raffle.prize}** (numbers 1–${raffle.max_number}, ${claimed.length} taken, ${openCount} open)`];
+  const lines = [`**Raffle #${raffleNo(raffle)} — ${raffle.prize}** (numbers 1–${raffle.max_number}, ${claimed.length} taken, ${openCount} open)`];
   if (claimed.length > 0) {
     lines.push('', ...claimed.map((n) => `• ${n} — <@${raffle.claims[String(n)]}>`));
   } else {
@@ -215,14 +225,14 @@ async function handleDraw(interaction) {
   const claimed = claimedNumbers(raffle);
   if (claimed.length === 0) {
     return interaction.reply({
-      content: `Raffle #${raffle.id} has no claimed numbers, so there is nothing to draw. Wait for claims, or cancel it with /raffle cancel.`,
+      content: `Raffle #${raffleNo(raffle)} has no claimed numbers, so there is nothing to draw. Wait for claims, or cancel it with /raffle cancel.`,
       ephemeral: true,
     });
   }
   const result = await drawRaffle(interaction.client, raffle);
   return interaction.reply({
     content: result
-      ? `Raffle #${raffle.id} drawn — number **${result.winnerNumber}** won, that's <@${result.winnerId}>.`
+      ? `Raffle #${raffleNo(raffle)} drawn — number **${result.winnerNumber}** won, that's <@${result.winnerId}>.`
       : 'The draw found no claimed numbers.',
     ephemeral: true,
   });
@@ -246,7 +256,7 @@ async function handleCancel(interaction) {
   } catch {
     // Post may be gone — the raffle is cancelled in the store either way.
   }
-  return interaction.reply({ content: `Raffle #${raffle.id} for **${raffle.prize}** was cancelled — no winner.`, ephemeral: true });
+  return interaction.reply({ content: `Raffle #${raffleNo(raffle)} for **${raffle.prize}** was cancelled — no winner.`, ephemeral: true });
 }
 
 async function handleRaffleCommand(interaction) {

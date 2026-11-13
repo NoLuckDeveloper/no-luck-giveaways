@@ -59,7 +59,7 @@ function buildRaffleEmbed(raffle, ended) {
   }
 
   embed.setFooter({
-    text: `Raffle #${raffle.id}${raffle.message_id ? ` · Message ID: ${raffle.message_id}` : ''} · Free entry — no money, no paid numbers`,
+    text: `Raffle #${raffle.number ?? raffle.id}${raffle.message_id ? ` · Message ID: ${raffle.message_id}` : ''} · Free entry — no money, no paid numbers`,
   });
   return embed;
 }

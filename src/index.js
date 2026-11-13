@@ -4,7 +4,9 @@
 //
 // Multi-server: the bot works in every server it is added to. Commands are
 // registered globally, and giveaways, raffles, and winners are kept separate
-// per server (see db.js).
+// per server (see db.js). Giveaways and raffles are numbered per server —
+// each server's sequence starts at #1, numbers are never reused, and a
+// number only ever means something inside its own server.
 // Env vars (never put secrets in code):
 //   DISCORD_TOKEN — bot token from discord.com/developers
 //   CLIENT_ID     — application ID from discord.com/developers
@@ -24,6 +26,7 @@ const db = require('./db');
 const { commandData, handleGiveawayCommand } = require('./commands');
 const { raffleCommandData, handleRaffleCommand } = require('./raffle-commands');
 const { drawGiveaway, checkMilestones } = require('./giveaway');
+const { refreshRenumberedEmbeds } = require('./refresh-embeds');
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -106,6 +109,9 @@ async function resumePending(client) {
     console.error('Could not list guilds for the startup milestone check:', err);
   }
   console.log(`Resumed ${resumed} pending timed giveaway(s) across ${guildCount} server(s); ${milestoneDraws} milestone(s) drawn on startup.`);
+  // Correct any active posts whose embeds still show a pre-migration
+  // (global) number — one-time, consumed by the call.
+  await refreshRenumberedEmbeds(client);
   // Raffles need no resume: they have no timers — an open raffle just stays
   // open until a mod draws or cancels it.
 }

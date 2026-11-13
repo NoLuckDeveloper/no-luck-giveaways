@@ -41,9 +41,9 @@ function buildTimedEmbed(giveaway, poolSize, ended, winnerId) {
   }
 
   if (giveaway.message_id) {
-    embed.setFooter({ text: `Message ID: ${giveaway.message_id} · Bots can't win` });
+    embed.setFooter({ text: `Giveaway #${giveaway.number ?? giveaway.id} · Message ID: ${giveaway.message_id} · Bots can't win` });
   } else {
-    embed.setFooter({ text: 'Bots can\'t win' });
+    embed.setFooter({ text: `Giveaway #${giveaway.number ?? giveaway.id} · Bots can't win` });
   }
   return embed;
 }
@@ -66,9 +66,9 @@ function buildMilestoneEmbed(giveaway, currentCount, ended, winnerId) {
   }
 
   if (giveaway.message_id) {
-    embed.setFooter({ text: `Message ID: ${giveaway.message_id} · Bots can't win` });
+    embed.setFooter({ text: `Giveaway #${giveaway.number ?? giveaway.id} · Message ID: ${giveaway.message_id} · Bots can't win` });
   } else {
-    embed.setFooter({ text: 'Bots can\'t win' });
+    embed.setFooter({ text: `Giveaway #${giveaway.number ?? giveaway.id} · Bots can't win` });
   }
   return embed;
 }
@@ -155,6 +155,7 @@ module.exports = {
   buildEmbed,
   buildTimedEmbed,
   buildMilestoneEmbed,
+  fetchGiveawayMessage,
   drawGiveaway,
   checkMilestones,
 };
