@@ -17,7 +17,7 @@ const MAX_NUMBER_CAP = 1000;
 
 const raffleCommandData = new SlashCommandBuilder()
   .setName('raffle')
-  .setDescription('Claim-your-number raffles — free entry, one number per person')
+  .setDescription('Claim-your-number raffles — free entry, claim as many numbers as you like')
   .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
@@ -136,7 +136,7 @@ async function handleStart(interaction) {
   await message.edit({ embeds: [buildRaffleEmbed(raffle, false)] }).catch(() => null);
 
   return interaction.reply({
-    content: `Raffle #${raffle.id} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, one number per person — a mod draws it with /raffle draw when ready. Members claim with /raffle claim.`,
+    content: `Raffle #${raffle.id} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, claim as many numbers as you like — a mod draws it with /raffle draw when ready. Members claim with /raffle claim.`,
     ephemeral: true,
   });
 }
@@ -155,14 +155,9 @@ async function handleClaim(interaction) {
 
   // The list just filled up: announce in the channel that a mod can draw.
   // Announcement only — the draw stays manual and mod-only. Only a claim
-  // that adds a new number can fill the list; a re-claim of the same number
-  // or a move leaves the count unchanged, so it never re-announces.
-  if (
-    fresh &&
-    !result.alreadyHad &&
-    (result.movedFrom === null || result.movedFrom === undefined) &&
-    claimedNumbers(fresh).length >= fresh.max_number
-  ) {
+  // that adds a new number can fill the list; re-claiming a number the user
+  // already holds changes nothing, so it never re-announces.
+  if (fresh && !result.alreadyHad && claimedNumbers(fresh).length >= fresh.max_number) {
     try {
       const channel = await interaction.client.channels.fetch(fresh.channel_id);
       if (channel && channel.isTextBased()) {
@@ -180,13 +175,11 @@ async function handleClaim(interaction) {
   if (result.alreadyHad) {
     return interaction.reply({ content: `You already hold number **${number}** in raffle #${raffle.id}.`, ephemeral: true });
   }
-  if (result.movedFrom !== null && result.movedFrom !== undefined) {
-    return interaction.reply({
-      content: `Moved your claim in raffle #${raffle.id}: number **${result.movedFrom}** is free again, and **${number}** is now yours.`,
-      ephemeral: true,
-    });
-  }
-  return interaction.reply({ content: `You're in raffle #${raffle.id} — number **${number}** is yours. Good luck!`, ephemeral: true });
+  const heldCount = fresh
+    ? Object.values(fresh.claims).filter((owner) => owner === interaction.user.id).length
+    : 1;
+  const heldNote = heldCount > 1 ? ` You now hold **${heldCount}** numbers in this raffle.` : '';
+  return interaction.reply({ content: `You're in raffle #${raffle.id} — number **${number}** is yours. Good luck!${heldNote}`, ephemeral: true });
 }
 
 async function handleBoard(interaction) {

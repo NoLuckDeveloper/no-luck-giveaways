@@ -171,11 +171,13 @@ function listPreviousWinners(giveawayId) {
 // ---------------------------------------------------------------------------
 // Claim-your-number raffles.
 // A raffle is numbers 1..max_number for one prize. Entry is free — a member
-// claims one number, first come first served. Claims are stored as an object
-// mapping number (as a string key) to the claiming user's ID, so one user
-// holds at most one number: claiming again moves their claim to the new
-// number and frees the old one. The draw picks a random CLAIMED number, so
-// there is always a winner when at least one number is claimed.
+// claims numbers first come first served, and may hold as many numbers as
+// they like: claiming another free number ADDS to their holdings and keeps
+// the numbers they already have. Claims are stored as an object mapping
+// number (as a string key) to the claiming user's ID, so one user can appear
+// next to several numbers. The draw picks a random CLAIMED number, so there
+// is always a winner when at least one number is claimed — and holding more
+// numbers means more chances.
 // ---------------------------------------------------------------------------
 
 function createRaffle({ guildId, channelId, prize, maxNumber, createdBy }) {
@@ -219,9 +221,10 @@ function setRaffleMessageId(raffleId, messageId) {
   }
 }
 
-// Claims a number for a user. Returns { ok: true, movedFrom } on success, or
-// { ok: false, error } with a plain-language reason. Re-claiming moves the
-// user's claim: the old number is freed and the new one is taken.
+// Claims a number for a user. Returns { ok: true, alreadyHad } on success,
+// or { ok: false, error } with a plain-language reason. Claiming a free
+// number ADDS it to the user's holdings — numbers already held stay held.
+// Re-claiming a number the user already holds is a no-op (alreadyHad).
 function claimRaffleNumber(raffleId, userId, number) {
   const r = store.raffles.find((row) => row.id === raffleId);
   if (!r) return { ok: false, error: 'raffle not found' };
@@ -234,18 +237,10 @@ function claimRaffleNumber(raffleId, userId, number) {
   if (holder && holder !== userId) {
     return { ok: false, error: `number ${number} is already taken` };
   }
-  if (holder === userId) return { ok: true, movedFrom: null, alreadyHad: true };
-  let movedFrom = null;
-  for (const [num, owner] of Object.entries(r.claims)) {
-    if (owner === userId) {
-      movedFrom = Number(num);
-      delete r.claims[num];
-      break;
-    }
-  }
+  if (holder === userId) return { ok: true, alreadyHad: true };
   r.claims[key] = userId;
   save();
-  return { ok: true, movedFrom, alreadyHad: false };
+  return { ok: true, alreadyHad: false };
 }
 
 function markRaffleEnded(raffleId, winnerNumber, winnerId) {

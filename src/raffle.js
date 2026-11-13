@@ -1,7 +1,8 @@
 // Claim-your-number raffle embeds and the draw itself.
-// Free entry only: a member claims one number (1..max_number), first come
-// first served. The draw picks a random CLAIMED number, so there is always a
-// winner when at least one number is claimed. Winners are announced by tag
+// Free entry only: a member claims free numbers, first come first served,
+// and may hold as many numbers as they like. The draw picks a random CLAIMED
+// number, so there is always a winner when at least one number is claimed —
+// holding more numbers means more chances. Winners are announced by tag
 // in the channel. This bot NEVER sends DMs.
 
 const { EmbedBuilder } = require('discord.js');
@@ -27,7 +28,7 @@ function buildRaffleEmbed(raffle, ended) {
     .setTitle(title)
     .addFields(
       { name: 'Prize', value: raffle.prize, inline: false },
-      { name: 'Numbers', value: `Pick a number from **1 to ${raffle.max_number}** — free, one per person`, inline: false },
+      { name: 'Numbers', value: `Pick a number from **1 to ${raffle.max_number}** — free, claim as many as you like`, inline: false },
       { name: 'Claimed', value: `${claimed.length} of ${raffle.max_number} numbers taken`, inline: true },
     );
 

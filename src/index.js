@@ -1,6 +1,6 @@
 // Mythic's Gathering giveaway bot. Also runs claim-your-number raffles
-// (/raffle) — free entry, one number per person, draw picks a random
-// claimed number. See README.md for both command sets.
+// (/raffle) — free entry, claim as many numbers as you like, draw picks a
+// random claimed number. See README.md for both command sets.
 //
 // Multi-server: the bot works in every server it is added to. Commands are
 // registered globally, and giveaways, raffles, and winners are kept separate
