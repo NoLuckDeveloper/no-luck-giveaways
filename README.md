@@ -8,6 +8,10 @@ by tag in the channel.
 It works in **every server it is added to** — same bot, same token, one invite
 link per server. Giveaways, raffles, and winners are kept separate per server:
 one server never sees or draws another server's giveaways or raffles.
+**Numbers are per server too**: each server's giveaways and raffles number
+from #1 in that server, and numbers are never reused — if giveaway #1 ends,
+the next giveaway in that server is #2. A number only ever means something
+inside its own server.
 
 It also runs **claim-your-number raffles** (`/raffle`): a mod starts a raffle
 for a prize with numbers 1 to N, members claim free numbers — as many as
@@ -36,6 +40,11 @@ Discord or under Texas law — so this bot will never take payment for a number.
 - **Winner announcements always name the prize**, exactly as you typed it in
   the command — for example: "Congratulations @winner, you won [prize]!"
 - **No DMs, ever.** Winners are announced in the channel only.
+- **Giveaways are numbered per server** — the first giveaway in a server is
+  #1, the next is #2, and numbers are never reused. The number is shown in
+  the giveaway post and in `/giveaway list`. End or reroll one by its number
+  (`/giveaway end id:2`) or by its message ID — either way it only ever
+  refers to a giveaway in the server you ran the command in.
 - **Survives restarts.** Giveaways live in a small JSON file, and when
   the bot starts up it re-schedules any timed giveaways still running and
   immediately draws any milestone targets already reached.
@@ -60,9 +69,12 @@ Discord or under Texas law — so this bot will never take payment for a number.
 - **Raffles survive restarts** just like giveaways — they live in the same
   JSON file, and an open raffle just stays open until a mod draws it or
   cancels it.
-- **Raffle IDs are short numbers** (#1, #2, …) shown in every raffle post and
-  reply. When only one raffle is open you can leave the ID off a command;
-  when several are open, the command asks you to say which one.
+- **Raffle numbers are per server** (#1, #2, …) shown in every raffle post
+  and reply — the first raffle in a server is #1, and numbers are never
+  reused. When only one raffle is open you can leave the number off a
+  command; when several are open, the command asks you to say which one.
+  A number only ever refers to a raffle in the server you ran the command
+  in — open raffles in other servers never block a claim, board, or draw.
 
 ## Commands
 
@@ -76,9 +88,9 @@ to every member.
 |---|---|
 | `/giveaway start prize:<prize> duration:<1h, 24h, 7d…> [channel:<#channel>]` | Starts a timed giveaway. Duration is 10 seconds to 30 days. Defaults to the channel you ran it in. |
 | `/giveaway milestone prize:<prize> target:<number> [channel:<#channel>]` | Starts a milestone giveaway that draws when the server hits `target` members. |
-| `/giveaway list` | Lists active giveaways with their end times or milestone targets. |
-| `/giveaway end message_id:<id>` | Ends a giveaway early and draws the winner now. The message ID is in the giveaway post's footer. |
-| `/giveaway reroll message_id:<id>` | Draws a new winner for an ended giveaway. It prefers members who haven't already won that giveaway. |
+| `/giveaway list` | Lists active giveaways with their numbers, end times or milestone targets. |
+| `/giveaway end [id:<giveaway #>] [message_id:<id>]` | Ends a giveaway early and draws the winner now. Give the number from the post (or the message ID from its footer). With neither, the bot lists this server's active giveaways so you can pick one. |
+| `/giveaway reroll [id:<giveaway #>] [message_id:<id>]` | Draws a new winner for an ended giveaway. It prefers members who haven't already won that giveaway. With neither, the bot lists this server's ended giveaways so you can pick one. |
 
 ### Number raffles
 
@@ -94,9 +106,10 @@ the board are open to every member. Entry is always free.
 | `/raffle draw [id:<raffle #>]` | Draws the winning number from the claimed numbers and announces the winner. Refused when nobody has claimed a number. |
 | `/raffle cancel [id:<raffle #>]` | Cancels an open raffle with no winner. |
 
-The `id` is the raffle's number (#1, #2, …), shown in every raffle post and
-reply. Leave it off when only one raffle is open; the bot asks for it when
-several are open.
+The `id` is the raffle's number in that server (#1, #2, …), shown in every
+raffle post and reply. Leave it off when only one raffle is open; the bot
+asks for it when several are open. Numbers start at #1 in each server and
+are never reused.
 
 ## Setup — step by step
 
@@ -163,8 +176,9 @@ straight from Discord into Render.
 2. The giveaway post appears, saying every server member is entered.
 3. After a minute, the post edits to show the winner and a message appears
    tagging them, naming the prize.
-4. Try `/giveaway list`, then end one early with `/giveaway end` and redraw
-   with `/giveaway reroll`, using the message ID from the post's footer.
+4. Try `/giveaway list`, then end one early with `/giveaway end id:1` and
+   redraw with `/giveaway reroll id:1` (or use the message ID from the
+   post's footer instead of the number).
 
 ### 6. Test a raffle
 
@@ -191,6 +205,9 @@ DISCORD_TOKEN=… CLIENT_ID=… node src/index.js
   and winners are kept separate per server — `/giveaway list` and
   `/raffle board` only ever show that server's own giveaways and raffles,
   and a draw only ever picks from that server's members or claimed numbers.
+  Giveaway and raffle numbers are per server too: each server's sequence
+  starts at #1 and numbers are never reused, so an old post or message
+  always refers to the same giveaway or raffle.
 - The "pool size" on a giveaway post is Discord's member count for the server,
   which includes bots — but bots are always filtered out of the actual draw.
 - If a giveaway post gets deleted before its draw, the bot still posts the
