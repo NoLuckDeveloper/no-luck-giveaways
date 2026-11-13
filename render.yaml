@@ -19,10 +19,13 @@ services:
         value: "20"
       - key: GIVEAWAY_DB_PATH
         value: /data/giveaways.json
-      # Set these three in the Render dashboard (never in this file):
+      # Set these two in the Render dashboard (never in this file):
       - key: DISCORD_TOKEN
         sync: false
       - key: CLIENT_ID
         sync: false
-      - key: GUILD_ID
-        sync: false
+      # No GUILD_ID: commands are registered globally, so the bot works in
+      # every server it is added to. If GUILD_ID is still set from the old
+      # single-server setup, it is ignored (except by the one-time data
+      # migration in src/db.js, which uses it only to attribute legacy rows
+      # saved without a guild_id).

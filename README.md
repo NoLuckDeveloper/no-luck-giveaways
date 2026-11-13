@@ -1,9 +1,13 @@
 # Mythic's Gathering Giveaway Bot
 
-A Discord bot for the Mythic's Gathering server. It runs giveaways where **every
-server member is automatically entered** — no buttons, no sign-ups, no DMs.
-When a giveaway ends, it draws exactly 1 winner at random from all non-bot
-members and announces the winner by tag in the channel.
+A Discord bot that runs giveaways where **every server member is automatically
+entered** — no buttons, no sign-ups, no DMs. When a giveaway ends, it draws
+exactly 1 winner at random from all non-bot members and announces the winner
+by tag in the channel.
+
+It works in **every server it is added to** — same bot, same token, one invite
+link per server. Giveaways, raffles, and winners are kept separate per server:
+one server never sees or draws another server's giveaways or raffles.
 
 It also runs **claim-your-number raffles** (`/raffle`): a mod starts a raffle
 for a prize with numbers 1 to N, members claim one free number each, and the
@@ -110,28 +114,28 @@ straight from Discord into Render.
 1. In the left menu, click **Bot**.
 2. Under **Privileged Gateway Intents**, turn **ON** "Server Members Intent".
    This is what lets the bot see members joining (for milestones) and read the
-   member list (for the draw). For a bot in one small server this is just a
+   member list (for the draw). For a bot in under 100 servers this is just a
    toggle — no approval needed. Leave "Message Content Intent" off; this bot
    never reads messages.
 3. Click **Reset Token**, then **Copy**. That is your `DISCORD_TOKEN`. Treat
    it like a password — never post it in Discord or send it to anyone.
 
-### 3. Invite the bot to the server
+### 3. Invite the bot to a server
 
 1. In the left menu, click **OAuth2**, then **URL Generator**.
 2. Under **Scopes**, check **bot** and **applications.commands**.
 3. Under **Bot Permissions**, check **Send Messages**, **Embed Links**, and
    **Read Message History**.
-4. Copy the generated URL at the bottom, open it in your browser, pick the
-   **Mythic's Gathering** server, and authorize.
+4. Copy the generated URL at the bottom, open it in your browser, pick a
+   server you manage, and authorize. **Use the same link for every server** —
+   the bot works in each one it is added to, with giveaways and raffles kept
+   separate per server.
+5. The `/giveaway` and `/raffle` commands are registered globally, so they
+   appear in every server the bot is in. Discord can take up to about an
+   hour to show them in a newly added server — if they don't show up right
+   away, wait a bit before re-checking.
 
-### 4. Get the server ID
-
-1. In Discord, go to **User Settings → Advanced** and turn on **Developer Mode**.
-2. Right-click the **Mythic's Gathering** server icon and choose **Copy Server ID**.
-   That is your `GUILD_ID`.
-
-### 5. Deploy on Render
+### 4. Deploy on Render
 
 1. Put these files at the root of a GitHub repo.
 2. In Render, go to **New → Blueprint** and pick that repo. The included
@@ -142,25 +146,26 @@ straight from Discord into Render.
 3. When Render asks for environment variables, fill in:
    - `DISCORD_TOKEN` — the bot token from step 2.
    - `CLIENT_ID` — the application ID from step 1.
-   - `GUILD_ID` — the server ID from step 4.
-   
+
    (`GIVEAWAY_DB_PATH` and `NODE_VERSION` are already set in `render.yaml`.)
+   There is no `GUILD_ID` anymore — it is not needed. If it is still set in
+   Render from the old single-server setup, it is ignored.
 4. Deploy. In the logs you should see `Logged in as …` and
-   `Registered /giveaway commands for guild …`. If a variable is missing, the
+   `Registered /giveaway and /raffle commands globally.`. If a variable is missing, the
    bot stops with a plain message naming it instead of crashing.
 
-### 6. Test it (takes about a minute)
+### 5. Test it (takes about a minute)
 
 1. In the server, run `/giveaway start prize:Test prize duration:1m`.
-   (If the command doesn't show up yet, wait a minute — guild commands
-   usually appear fast, but Discord can take a moment.)
+   (If the command doesn't show up yet, wait — global commands can take up
+   to about an hour to appear in a newly added server.)
 2. The giveaway post appears, saying every server member is entered.
 3. After a minute, the post edits to show the winner and a message appears
    tagging them, naming the prize.
 4. Try `/giveaway list`, then end one early with `/giveaway end` and redraw
    with `/giveaway reroll`, using the message ID from the post's footer.
 
-### 7. Test a raffle
+### 6. Test a raffle
 
 1. Run `/raffle start prize:Test raffle max-number:5`.
 2. Claim a number with `/raffle claim number:3` — the raffle post's board
@@ -176,12 +181,15 @@ Requires Node 20 or newer:
 
 ```sh
 npm install
-DISCORD_TOKEN=… CLIENT_ID=… GUILD_ID=… node src/index.js
+DISCORD_TOKEN=… CLIENT_ID=… node src/index.js
 ```
 
 ## Notes
 
-- The bot only answers in the server named by `GUILD_ID`.
+- The bot works in every server it is added to. Giveaways, raffles, entries,
+  and winners are kept separate per server — `/giveaway list` and
+  `/raffle board` only ever show that server's own giveaways and raffles,
+  and a draw only ever picks from that server's members or claimed numbers.
 - The "pool size" on a giveaway post is Discord's member count for the server,
   which includes bots — but bots are always filtered out of the actual draw.
 - If a giveaway post gets deleted before its draw, the bot still posts the
