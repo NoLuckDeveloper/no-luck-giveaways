@@ -10,9 +10,9 @@ link per server. Giveaways, raffles, and winners are kept separate per server:
 one server never sees or draws another server's giveaways or raffles.
 
 It also runs **claim-your-number raffles** (`/raffle`): a mod starts a raffle
-for a prize with numbers 1 to N, members claim one free number each, and the
-draw picks a random *claimed* number — so there is always a winner when at
-least one number is claimed.
+for a prize with numbers 1 to N, members claim free numbers — as many as
+they like — and the draw picks a random *claimed* number — so there is always
+a winner when at least one number is claimed.
 
 **Free entry only, everywhere.** Giveaways enter every member automatically,
 raffle numbers are free, and there is no money, no paid entry, and no virtual
@@ -42,10 +42,11 @@ Discord or under Texas law — so this bot will never take payment for a number.
 
 ### Number raffles
 
-- **Claim a number** — `/raffle start` with a prize and a max number
-  (e.g. 50 for numbers 1–50). Members claim one free number each with
-  `/raffle claim`. First come, first served: a taken number is rejected.
-  Claiming again **moves** your claim to the new number and frees the old one.
+- **Claim numbers** — `/raffle start` with a prize and a max number
+  (e.g. 50 for numbers 1–50). Members claim free numbers with
+  `/raffle claim` — as many as they like, first come, first served: a taken
+  number is rejected. Claiming another number adds to your holdings; the
+  numbers you already hold stay yours.
 - **The board stays current** — the raffle post updates after every claim, and
   `/raffle board` shows who holds each claimed number and which numbers are
   still open.
@@ -88,7 +89,7 @@ the board are open to every member. Entry is always free.
 | Command | What it does |
 |---|---|
 | `/raffle start prize:<prize> max-number:<N>` | Starts a number raffle, numbers 1 to N. No timer, no auto-draw — a mod draws it with `/raffle draw` when ready. |
-| `/raffle claim number:<N> [id:<raffle #>]` | Claims a free number in the open raffle. One per person — claiming again moves your claim to the new number and frees the old one. A taken number is rejected. |
+| `/raffle claim number:<N> [id:<raffle #>]` | Claims a free number in the open raffle. Claim as many as you like — each new claim adds to your holdings. A taken number is rejected. |
 | `/raffle board [id:<raffle #>]` | Shows who holds each claimed number and which numbers are still open. |
 | `/raffle draw [id:<raffle #>]` | Draws the winning number from the claimed numbers and announces the winner. Refused when nobody has claimed a number. |
 | `/raffle cancel [id:<raffle #>]` | Cancels an open raffle with no winner. |
@@ -169,8 +170,8 @@ straight from Discord into Render.
 
 1. Run `/raffle start prize:Test raffle max-number:5`.
 2. Claim a number with `/raffle claim number:3` — the raffle post's board
-   updates to show your claim. Try claiming a second number to see your
-   claim move, and `/raffle board` to see the full board.
+   updates to show your claim. Try claiming a second number to see both of
+   your numbers on the board, and `/raffle board` to see the full board.
 3. Claim numbers until the list fills — when the last number is claimed the
    bot announces in the channel that the list is full.
 4. Draw the winner with `/raffle draw` — the bot announces the winner by tag.
