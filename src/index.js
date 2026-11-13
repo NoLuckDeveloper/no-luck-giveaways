@@ -18,7 +18,6 @@ const db = require('./db');
 const { commandData, handleGiveawayCommand } = require('./commands');
 const { raffleCommandData, handleRaffleCommand } = require('./raffle-commands');
 const { drawGiveaway, checkMilestones } = require('./giveaway');
-const { drawRaffle } = require('./raffle');
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -35,9 +34,6 @@ const guildId = requireEnv('GUILD_ID');
 
 // Active timed-giveaway timers, keyed by giveaway row id.
 const timers = new Map();
-// Active timed-raffle timers, keyed by raffle row id (separate map —
-// raffle ids and giveaway ids are independent sequences).
-const raffleTimers = new Map();
 
 function scheduleTimedDraw(client, giveaway) {
   const delay = giveaway.ends_at - Date.now();
@@ -60,20 +56,6 @@ async function registerCommands() {
   console.log(`Registered /giveaway and /raffle commands for guild ${guildId}.`);
 }
 
-function scheduleTimedRaffleDraw(client, raffle) {
-  const delay = raffle.ends_at - Date.now();
-  if (delay <= 0) {
-    // The bot was down past the end time — draw right away on startup.
-    // With no claims the draw closes the raffle and announces no winner.
-    drawRaffle(client, raffle).catch((err) => console.error(`Raffle draw failed for raffle ${raffle.id}:`, err));
-    return;
-  }
-  raffleTimers.set(raffle.id, setTimeout(() => {
-    raffleTimers.delete(raffle.id);
-    drawRaffle(client, raffle).catch((err) => console.error(`Raffle draw failed for raffle ${raffle.id}:`, err));
-  }, delay));
-}
-
 async function resumePending(client) {
   const pending = db.listPendingGiveaways().filter((g) => g.guild_id === guildId);
   for (const giveaway of pending) {
@@ -92,13 +74,8 @@ async function resumePending(client) {
     console.error('Milestone check on startup failed:', err);
   }
   console.log(`Resumed ${pending.length} pending giveaway(s).`);
-  // Timed raffles still open: re-schedule their draws (or draw immediately
-  // if the bot was down past the end time).
-  const pendingRaffles = db.listPendingRaffles().filter((r) => r.guild_id === guildId);
-  for (const raffle of pendingRaffles) {
-    if (raffle.ends_at) scheduleTimedRaffleDraw(client, raffle);
-  }
-  console.log(`Resumed ${pendingRaffles.length} pending raffle(s).`);
+  // Raffles need no resume: they have no timers — an open raffle just stays
+  // open until a mod draws or cancels it.
 }
 
 async function main() {
@@ -120,7 +97,7 @@ async function main() {
         if (interaction.commandName === 'giveaway') {
           await handleGiveawayCommand(interaction, timers);
         } else if (interaction.commandName === 'raffle') {
-          await handleRaffleCommand(interaction, raffleTimers);
+          await handleRaffleCommand(interaction);
         }
         return;
       }

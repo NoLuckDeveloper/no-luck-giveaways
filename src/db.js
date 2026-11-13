@@ -130,7 +130,7 @@ function listPreviousWinners(giveawayId) {
 // there is always a winner when at least one number is claimed.
 // ---------------------------------------------------------------------------
 
-function createRaffle({ guildId, channelId, prize, maxNumber, endsAt, createdBy }) {
+function createRaffle({ guildId, channelId, prize, maxNumber, createdBy }) {
   const raffle = {
     id: store.nextRaffleId++,
     guild_id: guildId,
@@ -138,7 +138,6 @@ function createRaffle({ guildId, channelId, prize, maxNumber, endsAt, createdBy 
     message_id: null,
     prize,
     max_number: maxNumber,
-    ends_at: endsAt ?? null,
     status: 'active',
     claims: {},
     winner_number: null,
@@ -160,13 +159,6 @@ function getRaffleById(raffleId, guildId) {
 function listActiveRaffles(guildId) {
   return store.raffles
     .filter((r) => r.guild_id === guildId && r.status === 'active')
-    .sort((a, b) => a.created_at - b.created_at)
-    .map((r) => ({ ...r, claims: { ...r.claims } }));
-}
-
-function listPendingRaffles() {
-  return store.raffles
-    .filter((r) => r.status === 'active')
     .sort((a, b) => a.created_at - b.created_at)
     .map((r) => ({ ...r, claims: { ...r.claims } }));
 }
@@ -240,7 +232,6 @@ module.exports = {
   createRaffle,
   getRaffleById,
   listActiveRaffles,
-  listPendingRaffles,
   setRaffleMessageId,
   claimRaffleNumber,
   markRaffleEnded,

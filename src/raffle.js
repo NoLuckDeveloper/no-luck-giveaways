@@ -9,11 +9,6 @@ const db = require('./db');
 
 const BLUE = 0x3498db;
 
-function discordTimestamp(ms) {
-  const seconds = Math.floor(ms / 1000);
-  return { relative: `<t:${seconds}:R>`, full: `<t:${seconds}:F>` };
-}
-
 function claimedNumbers(raffle) {
   return Object.keys(raffle.claims)
     .map(Number)
@@ -36,10 +31,7 @@ function buildRaffleEmbed(raffle, ended) {
       { name: 'Claimed', value: `${claimed.length} of ${raffle.max_number} numbers taken`, inline: true },
     );
 
-  if (raffle.ends_at && !ended) {
-    const ts = discordTimestamp(raffle.ends_at);
-    embed.addFields({ name: 'Draws', value: `${ts.relative} (${ts.full})`, inline: true });
-  } else if (!ended) {
+  if (!ended) {
     embed.addFields({ name: 'Draws', value: 'When a mod runs `/raffle draw`', inline: true });
   }
 
@@ -63,8 +55,6 @@ function buildRaffleEmbed(raffle, ended) {
       value: `<@${raffle.winner_id}> with number **${raffle.winner_number}**`,
       inline: false,
     });
-  } else if (ended) {
-    embed.addFields({ name: 'Winner', value: 'No numbers were claimed', inline: false });
   }
 
   embed.setFooter({
@@ -85,27 +75,14 @@ async function fetchRaffleMessage(client, raffle) {
 }
 
 // Draws the raffle: picks one random CLAIMED number and announces its holder
-// as the winner. Returns { winnerNumber, winnerId }, or null when no number
-// was claimed (the raffle is still closed with no winner). Callers that draw
-// on a mod's command should refuse the null case first; the timed auto-draw
-// closes the raffle and announces that nobody claimed a number.
+// as the winner. Returns { winnerNumber, winnerId }. Callers refuse the draw
+// first when no number is claimed, so a zero-claim draw never gets here —
+// this returns null in that case without closing anything. Draws are manual
+// and mod-only; there is no auto-draw.
 async function drawRaffle(client, raffle) {
   const claimed = claimedNumbers(raffle);
+  if (claimed.length === 0) return null;
   const { channel, message } = await fetchRaffleMessage(client, raffle);
-
-  if (claimed.length === 0) {
-    db.markRaffleEnded(raffle.id, null, null);
-    const ended = { ...raffle, status: 'ended', winner_number: null, winner_id: null };
-    if (message) {
-      await message.edit({ embeds: [buildRaffleEmbed(ended, true)] }).catch(() => null);
-    }
-    if (channel && channel.isTextBased()) {
-      await channel
-        .send(`🎟️ The raffle for **${raffle.prize}** ended with no numbers claimed, so there is no winner.`)
-        .catch(() => null);
-    }
-    return null;
-  }
 
   const winnerNumber = claimed[Math.floor(Math.random() * claimed.length)];
   const winnerId = raffle.claims[String(winnerNumber)];

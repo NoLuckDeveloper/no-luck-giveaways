@@ -14,7 +14,6 @@ const db = require('./db');
 const { buildRaffleEmbed, drawRaffle, claimedNumbers } = require('./raffle');
 
 const MAX_NUMBER_CAP = 1000;
-const MAX_DURATION_MINUTES = 30 * 24 * 60; // 30 days, same cap as giveaways
 
 const raffleCommandData = new SlashCommandBuilder()
   .setName('raffle')
@@ -31,13 +30,6 @@ const raffleCommandData = new SlashCommandBuilder()
           .setRequired(true)
           .setMinValue(2)
           .setMaxValue(MAX_NUMBER_CAP),
-      )
-      .addIntegerOption((opt) =>
-        opt
-          .setName('duration-minutes')
-          .setDescription('Auto-draw after this many minutes (leave blank: a mod draws it manually)')
-          .setMinValue(1)
-          .setMaxValue(MAX_DURATION_MINUTES),
       ),
   )
   .addSubcommand((sub) =>
@@ -111,23 +103,20 @@ async function refreshRafflePost(client, raffle) {
   }
 }
 
-async function handleStart(interaction, raffleTimers) {
+async function handleStart(interaction) {
   if (!needsManageMessages(interaction)) {
     return interaction.reply({ content: 'You need the Manage Messages permission to start a raffle.', ephemeral: true });
   }
   const prize = interaction.options.getString('prize');
   const maxNumber = interaction.options.getInteger('max-number');
-  const durationMinutes = interaction.options.getInteger('duration-minutes');
   const channel = interaction.channel;
   const guild = interaction.guild;
-  const endsAt = durationMinutes ? Date.now() + durationMinutes * 60 * 1000 : null;
 
   const raffle = db.createRaffle({
     guildId: guild.id,
     channelId: channel.id,
     prize,
     maxNumber,
-    endsAt,
     createdBy: interaction.user.id,
   });
 
@@ -145,20 +134,8 @@ async function handleStart(interaction, raffleTimers) {
   raffle.message_id = message.id;
   await message.edit({ embeds: [buildRaffleEmbed(raffle, false)] }).catch(() => null);
 
-  if (endsAt) {
-    raffleTimers.set(raffle.id, setTimeout(() => {
-      raffleTimers.delete(raffle.id);
-      drawRaffle(interaction.client, { ...raffle, message_id: message.id }).catch((err) =>
-        console.error(`Raffle draw failed for raffle ${raffle.id}:`, err),
-      );
-    }, endsAt - Date.now()));
-  }
-
-  const drawLine = durationMinutes
-    ? `— it auto-draws in ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}`
-    : '— a mod draws it with /raffle draw when ready';
   return interaction.reply({
-    content: `Raffle #${raffle.id} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, one number per person ${drawLine}. Members claim with /raffle claim.`,
+    content: `Raffle #${raffle.id} started in <#${channel.id}> for **${prize}** — numbers 1 to ${maxNumber}, free entry, one number per person — a mod draws it with /raffle draw when ready. Members claim with /raffle claim.`,
     ephemeral: true,
   });
 }
@@ -174,6 +151,30 @@ async function handleClaim(interaction) {
   // Keep the raffle post's board current.
   const fresh = db.getRaffleById(raffle.id, interaction.guild.id);
   if (fresh) await refreshRafflePost(interaction.client, fresh);
+
+  // The list just filled up: announce in the channel that a mod can draw.
+  // Announcement only — the draw stays manual and mod-only. Only a claim
+  // that adds a new number can fill the list; a re-claim of the same number
+  // or a move leaves the count unchanged, so it never re-announces.
+  if (
+    fresh &&
+    !result.alreadyHad &&
+    (result.movedFrom === null || result.movedFrom === undefined) &&
+    claimedNumbers(fresh).length >= fresh.max_number
+  ) {
+    try {
+      const channel = await interaction.client.channels.fetch(fresh.channel_id);
+      if (channel && channel.isTextBased()) {
+        await channel
+          .send(
+            `🎟️ Raffle #${fresh.id} is full — all ${fresh.max_number} numbers are claimed! A mod can draw the winner with \`/raffle draw\`.`,
+          )
+          .catch(() => null);
+      }
+    } catch {
+      // The claim stands even if the announcement can't be posted.
+    }
+  }
 
   if (result.alreadyHad) {
     return interaction.reply({ content: `You already hold number **${number}** in raffle #${raffle.id}.`, ephemeral: true });
@@ -211,7 +212,7 @@ async function handleBoard(interaction) {
   return interaction.reply({ content: text, ephemeral: true });
 }
 
-async function handleDraw(interaction, raffleTimers) {
+async function handleDraw(interaction) {
   if (!needsManageMessages(interaction)) {
     return interaction.reply({ content: 'You need the Manage Messages permission to draw a raffle.', ephemeral: true });
   }
@@ -224,10 +225,6 @@ async function handleDraw(interaction, raffleTimers) {
       ephemeral: true,
     });
   }
-  if (raffleTimers.has(raffle.id)) {
-    clearTimeout(raffleTimers.get(raffle.id));
-    raffleTimers.delete(raffle.id);
-  }
   const result = await drawRaffle(interaction.client, raffle);
   return interaction.reply({
     content: result
@@ -237,16 +234,12 @@ async function handleDraw(interaction, raffleTimers) {
   });
 }
 
-async function handleCancel(interaction, raffleTimers) {
+async function handleCancel(interaction) {
   if (!needsManageMessages(interaction)) {
     return interaction.reply({ content: 'You need the Manage Messages permission to cancel a raffle.', ephemeral: true });
   }
   const { raffle, error } = resolveRaffle(interaction);
   if (error) return interaction.reply({ content: error, ephemeral: true });
-  if (raffleTimers.has(raffle.id)) {
-    clearTimeout(raffleTimers.get(raffle.id));
-    raffleTimers.delete(raffle.id);
-  }
   db.cancelRaffle(raffle.id);
   try {
     const channel = await interaction.client.channels.fetch(raffle.channel_id);
@@ -262,13 +255,13 @@ async function handleCancel(interaction, raffleTimers) {
   return interaction.reply({ content: `Raffle #${raffle.id} for **${raffle.prize}** was cancelled — no winner.`, ephemeral: true });
 }
 
-async function handleRaffleCommand(interaction, raffleTimers) {
+async function handleRaffleCommand(interaction) {
   const sub = interaction.options.getSubcommand();
-  if (sub === 'start') return handleStart(interaction, raffleTimers);
+  if (sub === 'start') return handleStart(interaction);
   if (sub === 'claim') return handleClaim(interaction);
   if (sub === 'board') return handleBoard(interaction);
-  if (sub === 'draw') return handleDraw(interaction, raffleTimers);
-  if (sub === 'cancel') return handleCancel(interaction, raffleTimers);
+  if (sub === 'draw') return handleDraw(interaction);
+  if (sub === 'cancel') return handleCancel(interaction);
   return interaction.reply({ content: 'Unknown raffle command.', ephemeral: true });
 }
 
